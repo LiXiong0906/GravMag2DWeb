@@ -16,7 +16,7 @@
       <Pane :size="isNarrowViewport ? 68 : 74" :min-size="isNarrowViewport ? 46 : 52">
         <Splitpanes horizontal class="main-stage observation-model-split default-theme">
           <Pane :size="34" :min-size="24">
-            <ResponseChart :response="response" @export-csv="exportCsv" />
+            <ResponseChart :response="response" :bounds="modelBounds" @export-csv="exportCsv" />
           </Pane>
           <Pane :size="66" :min-size="38">
             <ModelCanvas

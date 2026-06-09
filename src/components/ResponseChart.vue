@@ -25,7 +25,12 @@ import { GridComponent, LegendComponent, TooltipComponent, type GridComponentOpt
 import { LineChart, type LineSeriesOption } from 'echarts/charts';
 import { CanvasRenderer } from 'echarts/renderers';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import type { ModelResponsePoint } from '../domain/types';
+import type { ModelBounds, ModelResponsePoint } from '../domain/types';
+import {
+  PLOT_GUTTER_LEFT_CSS,
+  PLOT_GUTTER_RIGHT_CSS,
+  PLOT_X_TICK_INTERVAL_METERS
+} from '../domain/viewLayout';
 
 echarts.use([GridComponent, LegendComponent, TooltipComponent, LineChart, CanvasRenderer]);
 
@@ -33,6 +38,7 @@ type EChartsOption = echarts.ComposeOption<GridComponentOption | LineSeriesOptio
 
 const props = defineProps<{
   response: ModelResponsePoint[];
+  bounds: ModelBounds;
 }>();
 
 defineEmits<{
@@ -62,8 +68,8 @@ const option = computed<EChartsOption>(() => ({
   },
   grid: {
     top: 44,
-    left: 58,
-    right: 58,
+    left: PLOT_GUTTER_LEFT_CSS,
+    right: PLOT_GUTTER_RIGHT_CSS,
     bottom: 40
   },
   xAxis: {
@@ -71,7 +77,10 @@ const option = computed<EChartsOption>(() => ({
     name: 'x (m)',
     nameLocation: 'middle',
     nameGap: 26,
-    axisLine: { lineStyle: { color: '#52616f' } },
+    min: props.bounds.minX,
+    max: props.bounds.maxX,
+    interval: PLOT_X_TICK_INTERVAL_METERS,
+    axisLine: { onZero: false, lineStyle: { color: '#52616f' } },
     axisLabel: { color: '#52616f' },
     splitLine: { lineStyle: { color: '#e5e7eb' } }
   },
@@ -79,14 +88,14 @@ const option = computed<EChartsOption>(() => ({
     {
       type: 'value',
       name: 'Δg (mGal)',
-      axisLine: { lineStyle: { color: '#0f766e' } },
+      axisLine: { onZero: false, lineStyle: { color: '#0f766e' } },
       axisLabel: { color: '#0f766e' },
       splitLine: { lineStyle: { color: '#e5e7eb' } }
     },
     {
       type: 'value',
       name: 'ΔT (nT)',
-      axisLine: { lineStyle: { color: '#b42318' } },
+      axisLine: { onZero: false, lineStyle: { color: '#b42318' } },
       axisLabel: { color: '#b42318' },
       splitLine: { show: false }
     }

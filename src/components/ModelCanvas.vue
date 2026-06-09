@@ -38,6 +38,11 @@ import {
   polygonCentroid
 } from '../domain/geometry';
 import type { ModelBounds, Point2D, PolygonBody } from '../domain/types';
+import {
+  createPlotXTicks,
+  PLOT_GUTTER_LEFT_CSS,
+  PLOT_GUTTER_RIGHT_CSS
+} from '../domain/viewLayout';
 
 const props = defineProps<{
   bodies: PolygonBody[];
@@ -76,9 +81,10 @@ function worldToCanvas(point: Point2D): Point2D {
   if (!canvas) {
     return { x: 0, z: 0 };
   }
+  const plotArea = getHorizontalPlotArea(canvas);
 
   return {
-    x: ((point.x - props.bounds.minX) / worldWidth.value) * canvas.width,
+    x: plotArea.left + ((point.x - props.bounds.minX) / worldWidth.value) * plotArea.width,
     z: ((point.z - props.bounds.minZ) / worldHeight.value) * canvas.height
   };
 }
@@ -88,9 +94,11 @@ function canvasToWorld(point: Point2D): Point2D {
   if (!canvas) {
     return { x: 0, z: 0 };
   }
+  const plotArea = getHorizontalPlotArea(canvas);
+  const clampedX = Math.min(plotArea.right, Math.max(plotArea.left, point.x));
 
   return {
-    x: props.bounds.minX + (point.x / canvas.width) * worldWidth.value,
+    x: props.bounds.minX + ((clampedX - plotArea.left) / plotArea.width) * worldWidth.value,
     z: props.bounds.minZ + (point.z / canvas.height) * worldHeight.value
   };
 }
@@ -294,6 +302,7 @@ function render() {
 }
 
 function drawBackground(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
+  const plotArea = getHorizontalPlotArea(canvas);
   context.fillStyle = '#f8fafc';
   context.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -302,20 +311,20 @@ function drawBackground(context: CanvasRenderingContext2D, canvas: HTMLCanvasEle
   context.font = `${12 * window.devicePixelRatio}px Inter, sans-serif`;
   context.fillStyle = '#607080';
 
-  for (let x = -1000; x <= 1000; x += 400) {
+  for (const x of createPlotXTicks(props.bounds.minX, props.bounds.maxX)) {
     const point = worldToCanvas({ x, z: props.bounds.minZ });
     context.beginPath();
     context.moveTo(point.x, 0);
     context.lineTo(point.x, canvas.height);
     context.stroke();
-    context.fillText(`${x} m`, point.x + 4, 18 * window.devicePixelRatio);
+    drawHorizontalTickLabel(context, canvas, `${x} m`, point.x, 18 * window.devicePixelRatio);
   }
 
   for (let z = 100; z <= 900; z += 200) {
     const point = worldToCanvas({ x: props.bounds.minX, z });
     context.beginPath();
-    context.moveTo(0, point.z);
-    context.lineTo(canvas.width, point.z);
+    context.moveTo(plotArea.left, point.z);
+    context.lineTo(plotArea.right, point.z);
     context.stroke();
     context.fillText(`${z} m`, 8 * window.devicePixelRatio, point.z - 6);
   }
@@ -324,8 +333,8 @@ function drawBackground(context: CanvasRenderingContext2D, canvas: HTMLCanvasEle
   context.strokeStyle = '#111827';
   context.lineWidth = 2 * window.devicePixelRatio;
   context.beginPath();
-  context.moveTo(0, surface.z + 1);
-  context.lineTo(canvas.width, surface.z + 1);
+  context.moveTo(plotArea.left, surface.z + 1);
+  context.lineTo(plotArea.right, surface.z + 1);
   context.stroke();
 }
 
@@ -397,6 +406,30 @@ function drawScale(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement)
   context.fillText('z down', canvas.width - 72 * window.devicePixelRatio, 24 * window.devicePixelRatio);
 }
 
+function drawHorizontalTickLabel(
+  context: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  label: string,
+  x: number,
+  y: number
+) {
+  const inset = 6 * window.devicePixelRatio;
+  const previousAlign = context.textAlign;
+
+  if (x <= PLOT_GUTTER_LEFT_CSS * window.devicePixelRatio + inset) {
+    context.textAlign = 'left';
+    context.fillText(label, x + inset, y);
+  } else if (x >= canvas.width - PLOT_GUTTER_RIGHT_CSS * window.devicePixelRatio - inset) {
+    context.textAlign = 'right';
+    context.fillText(label, x - inset, y);
+  } else {
+    context.textAlign = 'center';
+    context.fillText(label, x, y);
+  }
+
+  context.textAlign = previousAlign;
+}
+
 function exportPng() {
   const canvas = canvasRef.value;
   if (!canvas) {
@@ -422,6 +455,24 @@ function hexToRgba(hex: string, alpha: number) {
   const green = Number.parseInt(normalized.slice(2, 4), 16);
   const blue = Number.parseInt(normalized.slice(4, 6), 16);
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function getHorizontalPlotArea(canvas: HTMLCanvasElement) {
+  const ratio = window.devicePixelRatio || 1;
+  const desiredLeft = PLOT_GUTTER_LEFT_CSS * ratio;
+  const desiredRight = PLOT_GUTTER_RIGHT_CSS * ratio;
+  const minimumPlotWidth = 120 * ratio;
+  const totalDesiredWidth = desiredLeft + desiredRight + minimumPlotWidth;
+  const scale = canvas.width < totalDesiredWidth ? canvas.width / totalDesiredWidth : 1;
+  const left = desiredLeft * scale;
+  const rightGutter = desiredRight * scale;
+  const right = canvas.width - rightGutter;
+
+  return {
+    left,
+    right,
+    width: Math.max(1, right - left)
+  };
 }
 
 onMounted(async () => {
