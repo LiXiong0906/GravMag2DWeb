@@ -6,6 +6,9 @@
         <h2>Δg / ΔT response</h2>
       </div>
       <div class="chart-actions">
+        <button class="icon-button" type="button" title="导出曲线 CSV" @click="$emit('exportCsv')">
+          <Table :size="18" />
+        </button>
         <button class="icon-button" type="button" title="导出曲线 PNG" @click="exportPng">
           <Download :size="18" />
         </button>
@@ -16,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { Download } from '@lucide/vue';
+import { Download, Table } from '@lucide/vue';
 import * as echarts from 'echarts/core';
 import { GridComponent, LegendComponent, TooltipComponent, type GridComponentOption } from 'echarts/components';
 import { LineChart, type LineSeriesOption } from 'echarts/charts';
@@ -30,6 +33,10 @@ type EChartsOption = echarts.ComposeOption<GridComponentOption | LineSeriesOptio
 
 const props = defineProps<{
   response: ModelResponsePoint[];
+}>();
+
+defineEmits<{
+  exportCsv: [];
 }>();
 
 const chartRef = ref<HTMLDivElement | null>(null);

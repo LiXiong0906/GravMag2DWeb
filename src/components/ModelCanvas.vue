@@ -3,7 +3,7 @@
     <div class="model-header">
       <div>
         <p class="eyebrow">Subsurface editor</p>
-        <h2>Talwani polygon</h2>
+        <h2>Talwani polygons</h2>
       </div>
       <div class="model-tools">
         <button class="icon-button" type="button" title="重置模型" @click="$emit('reset')">
@@ -40,12 +40,14 @@ import {
 import type { ModelBounds, Point2D, PolygonBody } from '../domain/types';
 
 const props = defineProps<{
-  body: PolygonBody;
+  bodies: PolygonBody[];
+  selectedBodyId: string;
   bounds: ModelBounds;
 }>();
 
 const emit = defineEmits<{
-  update: [body: PolygonBody];
+  updateBody: [body: PolygonBody];
+  selectBody: [id: string];
   reset: [];
 }>();
 
@@ -53,15 +55,19 @@ type DragMode = 'vertex' | 'body' | null;
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const selectedVertex = ref(0);
-const hoveredVertex = ref<number | null>(null);
+const hoveredVertex = ref<{ bodyId: string; vertexIndex: number } | null>(null);
 const drag = ref<{
   mode: DragMode;
+  bodyId: string;
   startWorld: Point2D;
   startVertices: Point2D[];
 } | null>(null);
 
 let resizeObserver: ResizeObserver | null = null;
 
+const activeBody = computed(
+  () => props.bodies.find((body) => body.id === props.selectedBodyId) ?? props.bodies[0]
+);
 const worldWidth = computed(() => props.bounds.maxX - props.bounds.minX);
 const worldHeight = computed(() => props.bounds.maxZ - props.bounds.minZ);
 
@@ -102,36 +108,58 @@ function eventToCanvasPoint(event: PointerEvent | MouseEvent): Point2D {
   };
 }
 
-function findVertexAt(canvasPoint: Point2D): number | null {
+function findVertexAt(canvasPoint: Point2D) {
   const radius = 12 * window.devicePixelRatio;
-  for (let i = 0; i < props.body.vertices.length; i += 1) {
-    const vertexCanvas = worldToCanvas(props.body.vertices[i]);
-    if (Math.hypot(vertexCanvas.x - canvasPoint.x, vertexCanvas.z - canvasPoint.z) <= radius) {
-      return i;
+  for (const body of [...props.bodies].reverse()) {
+    if (!body.visible) {
+      continue;
+    }
+    for (let i = 0; i < body.vertices.length; i += 1) {
+      const vertexCanvas = worldToCanvas(body.vertices[i]);
+      if (Math.hypot(vertexCanvas.x - canvasPoint.x, vertexCanvas.z - canvasPoint.z) <= radius) {
+        return { bodyId: body.id, vertexIndex: i };
+      }
     }
   }
   return null;
+}
+
+function findBodyAt(worldPoint: Point2D) {
+  return [...props.bodies]
+    .reverse()
+    .find((body) => body.visible && pointInPolygon(worldPoint, body.vertices));
 }
 
 function onPointerDown(event: PointerEvent) {
   canvasRef.value?.focus();
   const canvasPoint = eventToCanvasPoint(event);
   const worldPoint = canvasToWorld(canvasPoint);
-  const vertexIndex = findVertexAt(canvasPoint);
+  const vertexHit = findVertexAt(canvasPoint);
 
-  if (vertexIndex !== null) {
-    selectedVertex.value = vertexIndex;
+  if (vertexHit) {
+    const body = props.bodies.find((candidate) => candidate.id === vertexHit.bodyId);
+    if (!body) {
+      return;
+    }
+    selectedVertex.value = vertexHit.vertexIndex;
+    emit('selectBody', body.id);
     drag.value = {
       mode: 'vertex',
+      bodyId: body.id,
       startWorld: worldPoint,
-      startVertices: props.body.vertices.map((point) => ({ ...point }))
+      startVertices: body.vertices.map((point) => ({ ...point }))
     };
-  } else if (pointInPolygon(worldPoint, props.body.vertices)) {
-    drag.value = {
-      mode: 'body',
-      startWorld: worldPoint,
-      startVertices: props.body.vertices.map((point) => ({ ...point }))
-    };
+  } else {
+    const body = findBodyAt(worldPoint);
+    if (body) {
+      emit('selectBody', body.id);
+      drag.value = {
+        mode: 'body',
+        bodyId: body.id,
+        startWorld: worldPoint,
+        startVertices: body.vertices.map((point) => ({ ...point }))
+      };
+    }
   }
 
   render();
@@ -146,6 +174,12 @@ function onPointerMove(event: PointerEvent) {
     return;
   }
 
+  const body = props.bodies.find((candidate) => candidate.id === drag.value?.bodyId);
+  if (!body) {
+    drag.value = null;
+    return;
+  }
+
   const worldPoint = canvasToWorld(canvasPoint);
   const dx = worldPoint.x - drag.value.startWorld.x;
   const dz = worldPoint.z - drag.value.startWorld.z;
@@ -156,7 +190,7 @@ function onPointerMove(event: PointerEvent) {
         ? clampPointToBounds({ x: vertex.x + dx, z: vertex.z + dz }, props.bounds)
         : { ...vertex }
     );
-    emitBody(nextVertices);
+    emitBody(body, nextVertices);
   }
 
   if (drag.value.mode === 'body') {
@@ -164,8 +198,7 @@ function onPointerMove(event: PointerEvent) {
       x: vertex.x + dx,
       z: vertex.z + dz
     }));
-    const clamped = clampTranslatedPolygon(translated);
-    emitBody(clamped);
+    emitBody(body, clampTranslatedPolygon(translated));
   }
 
   render();
@@ -177,18 +210,28 @@ function onPointerUp() {
 
 function onDoubleClick(event: MouseEvent) {
   const worldPoint = clampPointToBounds(canvasToWorld(eventToCanvasPoint(event)), props.bounds);
-  const nextVertices = insertPointOnNearestEdge(props.body.vertices, worldPoint);
+  const body = findBodyAt(worldPoint) ?? activeBody.value;
+  if (!body) {
+    return;
+  }
+  emit('selectBody', body.id);
+  const nextVertices = insertPointOnNearestEdge(body.vertices, worldPoint);
   selectedVertex.value = nextVertices.findIndex(
     (point) => point.x === worldPoint.x && point.z === worldPoint.z
   );
-  emitBody(nextVertices);
+  emitBody(body, nextVertices);
 }
 
 function onKeyDown(event: KeyboardEvent) {
-  if ((event.key === 'Delete' || event.key === 'Backspace') && props.body.vertices.length > 3) {
-    const nextVertices = props.body.vertices.filter((_, index) => index !== selectedVertex.value);
+  const body = activeBody.value;
+  if (
+    body &&
+    (event.key === 'Delete' || event.key === 'Backspace') &&
+    body.vertices.length > 3
+  ) {
+    const nextVertices = body.vertices.filter((_, index) => index !== selectedVertex.value);
     selectedVertex.value = Math.max(0, Math.min(selectedVertex.value, nextVertices.length - 1));
-    emitBody(nextVertices);
+    emitBody(body, nextVertices);
   }
 }
 
@@ -216,9 +259,9 @@ function clampTranslatedPolygon(vertices: Point2D[]): Point2D[] {
   }));
 }
 
-function emitBody(vertices: Point2D[]) {
-  emit('update', {
-    ...props.body,
+function emitBody(body: PolygonBody, vertices: Point2D[]) {
+  emit('updateBody', {
+    ...body,
     vertices
   });
 }
@@ -245,7 +288,7 @@ function render() {
 
   context.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground(context, canvas);
-  drawPolygon(context);
+  props.bodies.forEach((body) => drawPolygon(context, body));
   drawHandles(context);
   drawScale(context, canvas);
 }
@@ -286,45 +329,51 @@ function drawBackground(context: CanvasRenderingContext2D, canvas: HTMLCanvasEle
   context.stroke();
 }
 
-function drawPolygon(context: CanvasRenderingContext2D) {
-  const points = props.body.vertices.map(worldToCanvas);
-  if (points.length < 3) {
+function drawPolygon(context: CanvasRenderingContext2D, body: PolygonBody) {
+  const points = body.vertices.map(worldToCanvas);
+  if (points.length < 3 || !body.visible) {
     return;
   }
 
+  const selected = body.id === props.selectedBodyId;
   context.beginPath();
   context.moveTo(points[0].x, points[0].z);
   points.slice(1).forEach((point) => context.lineTo(point.x, point.z));
   context.closePath();
 
-  const gradient = context.createLinearGradient(0, 0, 0, canvasRef.value?.height ?? 1);
-  gradient.addColorStop(0, 'rgba(15, 118, 110, 0.90)');
-  gradient.addColorStop(1, 'rgba(180, 35, 24, 0.82)');
-  context.fillStyle = gradient;
+  context.fillStyle = hexToRgba(body.color, selected ? 0.84 : 0.52);
   context.fill();
-  context.strokeStyle = '#111827';
-  context.lineWidth = 2.5 * window.devicePixelRatio;
+  context.strokeStyle = selected ? '#111827' : hexToRgba(body.color, 0.95);
+  context.lineWidth = (selected ? 3 : 1.8) * window.devicePixelRatio;
   context.stroke();
 
-  const centroid = worldToCanvas(polygonCentroid(props.body.vertices));
-  context.fillStyle = '#ffffff';
-  context.font = `${13 * window.devicePixelRatio}px Inter, sans-serif`;
+  const centroid = worldToCanvas(polygonCentroid(body.vertices));
+  context.fillStyle = selected ? '#ffffff' : '#111827';
+  context.font = `${12 * window.devicePixelRatio}px Inter, sans-serif`;
   context.textAlign = 'center';
-  context.fillText(
-    `Δρ ${props.body.densityContrastKgM3.toFixed(0)} kg/m³ | κ ${props.body.susceptibilitySI.toFixed(3)}`,
-    centroid.x,
-    centroid.z
-  );
+  context.fillText(body.name, centroid.x, centroid.z);
   context.textAlign = 'start';
 }
 
 function drawHandles(context: CanvasRenderingContext2D) {
-  props.body.vertices.forEach((vertex, index) => {
+  const body = activeBody.value;
+  if (!body || !body.visible) {
+    return;
+  }
+
+  body.vertices.forEach((vertex, index) => {
     const point = worldToCanvas(vertex);
     const isSelected = selectedVertex.value === index;
-    const isHovered = hoveredVertex.value === index;
+    const isHovered =
+      hoveredVertex.value?.bodyId === body.id && hoveredVertex.value.vertexIndex === index;
     context.beginPath();
-    context.arc(point.x, point.z, (isSelected || isHovered ? 7 : 5) * window.devicePixelRatio, 0, Math.PI * 2);
+    context.arc(
+      point.x,
+      point.z,
+      (isSelected || isHovered ? 7 : 5) * window.devicePixelRatio,
+      0,
+      Math.PI * 2
+    );
     context.fillStyle = isSelected ? '#fef3c7' : '#ffffff';
     context.fill();
     context.strokeStyle = isSelected || isHovered ? '#111827' : '#475569';
@@ -345,7 +394,7 @@ function drawScale(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement)
   context.fillStyle = '#111827';
   context.font = `${12 * window.devicePixelRatio}px Inter, sans-serif`;
   context.fillText('400 m', (start.x + end.x) / 2 - 18 * window.devicePixelRatio, start.z - 8);
-  context.fillText('z downward', canvas.width - 96 * window.devicePixelRatio, 24 * window.devicePixelRatio);
+  context.fillText('z down', canvas.width - 72 * window.devicePixelRatio, 24 * window.devicePixelRatio);
 }
 
 function exportPng() {
@@ -360,6 +409,21 @@ function exportPng() {
   link.click();
 }
 
+function hexToRgba(hex: string, alpha: number) {
+  const value = hex.replace('#', '');
+  const normalized =
+    value.length === 3
+      ? value
+          .split('')
+          .map((character) => `${character}${character}`)
+          .join('')
+      : value.padEnd(6, '0').slice(0, 6);
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
 onMounted(async () => {
   await nextTick();
   if (canvasRef.value) {
@@ -370,9 +434,16 @@ onMounted(async () => {
 });
 
 watch(
-  () => props.body,
+  () => [props.bodies, props.selectedBodyId],
   () => render(),
   { deep: true }
+);
+
+watch(
+  () => props.selectedBodyId,
+  () => {
+    selectedVertex.value = 0;
+  }
 );
 
 onBeforeUnmount(() => {

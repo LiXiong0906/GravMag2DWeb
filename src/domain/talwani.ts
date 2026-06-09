@@ -10,7 +10,8 @@ import type {
   ModelResponsePoint,
   ObservationGrid,
   Point2D,
-  PolygonBody
+  PolygonBody,
+  ResponseOptions
 } from './types';
 
 const GRAVITATIONAL_CONSTANT = 6.6743e-11;
@@ -102,19 +103,47 @@ export function computeMagneticTalwani(
 
 export function computeModelResponse(
   grid: ObservationGrid,
-  body: PolygonBody,
-  field: FieldSettings
+  bodiesOrBody: PolygonBody | PolygonBody[],
+  field: FieldSettings,
+  options: Partial<ResponseOptions> = {}
 ): ModelResponsePoint[] {
   const count = Math.max(2, Math.round(grid.count));
   const step = (grid.maxX - grid.minX) / (count - 1);
   const observationXs = Array.from({ length: count }, (_, index) => grid.minX + index * step);
-  const gravity = computeGravityTalwani(observationXs, body, grid.observationZ);
-  const magnetic = computeMagneticTalwani(observationXs, body, field, grid.observationZ);
+  const bodies = Array.isArray(bodiesOrBody) ? bodiesOrBody : [bodiesOrBody];
+  const visibleBodies = bodies.filter((body) => body.visible !== false);
+  const rawGravity = observationXs.map(() => 0);
+  const rawMagnetic = observationXs.map(() => 0);
+
+  for (const body of visibleBodies) {
+    const gravity = computeGravityTalwani(observationXs, body, grid.observationZ);
+    const magnetic = computeMagneticTalwani(observationXs, body, field, grid.observationZ);
+    for (let index = 0; index < observationXs.length; index += 1) {
+      rawGravity[index] += gravity[index];
+      rawMagnetic[index] += magnetic[index];
+    }
+  }
+
+  const responseOptions = normalizeResponseOptions(options);
+  const noisyGravity = addDeterministicNoise(
+    rawGravity,
+    responseOptions.gravityNoiseMgal,
+    responseOptions.noiseSeed
+  );
+  const noisyMagnetic = addDeterministicNoise(
+    rawMagnetic,
+    responseOptions.magneticNoiseNt,
+    responseOptions.noiseSeed + 101
+  );
+  const gravity = movingAverage(noisyGravity, responseOptions.smoothingWindow);
+  const magnetic = movingAverage(noisyMagnetic, responseOptions.smoothingWindow);
 
   return observationXs.map((x, index) => ({
     x,
     gravityMgal: gravity[index],
-    magneticNt: magnetic[index]
+    magneticNt: magnetic[index],
+    rawGravityMgal: rawGravity[index],
+    rawMagneticNt: rawMagnetic[index]
   }));
 }
 
@@ -224,4 +253,55 @@ function samplePolygonArea(vertices: Point2D[], targetSamples: number) {
 
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
+}
+
+function normalizeResponseOptions(options: Partial<ResponseOptions>): ResponseOptions {
+  const smoothingWindow = Math.max(1, Math.round(options.smoothingWindow ?? 1));
+  return {
+    gravityNoiseMgal: Math.max(0, options.gravityNoiseMgal ?? 0),
+    magneticNoiseNt: Math.max(0, options.magneticNoiseNt ?? 0),
+    smoothingWindow: smoothingWindow % 2 === 0 ? smoothingWindow + 1 : smoothingWindow,
+    noiseSeed: Math.max(1, Math.round(options.noiseSeed ?? 20260609))
+  };
+}
+
+function addDeterministicNoise(values: number[], amplitude: number, seed: number): number[] {
+  if (amplitude === 0) {
+    return [...values];
+  }
+
+  const random = createSeededRandom(seed);
+  return values.map((value) => value + amplitude * gaussianLike(random));
+}
+
+function movingAverage(values: number[], windowSize: number): number[] {
+  if (windowSize <= 1) {
+    return [...values];
+  }
+
+  const half = Math.floor(windowSize / 2);
+  return values.map((_, index) => {
+    let sum = 0;
+    let count = 0;
+    for (let offset = -half; offset <= half; offset += 1) {
+      const sourceIndex = index + offset;
+      if (sourceIndex >= 0 && sourceIndex < values.length) {
+        sum += values[sourceIndex];
+        count += 1;
+      }
+    }
+    return sum / count;
+  });
+}
+
+function createSeededRandom(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (1664525 * state + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+function gaussianLike(random: () => number): number {
+  return random() + random() + random() + random() + random() + random() - 3;
 }

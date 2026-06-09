@@ -19,10 +19,23 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  min-height: 100%;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 button,
@@ -34,9 +47,19 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .app-shell {
-  min-height: 100vh;
-  padding: 22px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  padding: 16px;
 }
 
 .top-bar {
@@ -44,8 +67,8 @@ button {
   align-items: flex-end;
   justify-content: space-between;
   gap: 18px;
-  max-width: 1480px;
-  margin: 0 auto 18px;
+  min-height: 64px;
+  margin: 0;
 }
 
 .top-bar h1,
@@ -58,7 +81,7 @@ button {
 }
 
 .top-bar h1 {
-  font-size: 40px;
+  font-size: 34px;
   line-height: 1.08;
 }
 
@@ -88,18 +111,17 @@ button {
 }
 
 .workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 18px;
-  max-width: 1480px;
-  margin: 0 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .main-stage {
-  display: grid;
-  grid-template-rows: minmax(280px, 38vh) minmax(360px, 1fr);
-  gap: 18px;
+  width: 100%;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
 }
 
 .chart-shell,
@@ -113,7 +135,9 @@ button {
 
 .chart-shell,
 .model-shell {
+  height: 100%;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -156,24 +180,82 @@ button {
   background: #f8fafc;
 }
 
+.icon-button:disabled:hover {
+  border-color: var(--line);
+  background: #ffffff;
+}
+
 .chart-canvas {
   width: 100%;
   height: calc(100% - 72px);
-  min-height: 220px;
+  min-height: 0;
 }
 
 .model-canvas {
   display: block;
   width: 100%;
   height: calc(100% - 72px);
-  min-height: 310px;
+  min-height: 0;
   outline: none;
   cursor: crosshair;
 }
 
 .control-panel {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
   padding: 18px;
-  align-self: stretch;
+}
+
+.splitpanes__pane {
+  min-width: 0;
+  min-height: 0;
+}
+
+.workbench-split > .splitpanes__splitter,
+.observation-model-split > .splitpanes__splitter {
+  position: relative;
+  flex-shrink: 0;
+  background: transparent;
+}
+
+.workbench-split > .splitpanes__splitter {
+  width: 14px;
+  border: 0;
+}
+
+.observation-model-split > .splitpanes__splitter {
+  height: 14px;
+  border: 0;
+}
+
+.workbench-split > .splitpanes__splitter::before,
+.observation-model-split > .splitpanes__splitter::before {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  background: #b8c2cc;
+  transition: background 0.15s ease;
+}
+
+.workbench-split > .splitpanes__splitter::before {
+  top: 16px;
+  bottom: 16px;
+  left: 6px;
+  width: 2px;
+}
+
+.observation-model-split > .splitpanes__splitter::before {
+  top: 6px;
+  right: 16px;
+  left: 16px;
+  height: 2px;
+}
+
+.workbench-split > .splitpanes__splitter:hover::before,
+.observation-model-split > .splitpanes__splitter:hover::before {
+  background: #52616f;
 }
 
 .panel-title {
@@ -192,6 +274,113 @@ fieldset {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.tool-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.body-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.body-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 8px;
+}
+
+.body-chip {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 6px 7px;
+  color: #25313c;
+  text-align: left;
+}
+
+.body-chip.selected {
+  border-color: #111827;
+  background: #f8fafc;
+}
+
+.body-chip span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.color-dot {
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(17, 24, 39, 0.28);
+  border-radius: 50%;
+}
+
+.mini-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.mini-icon:hover {
+  background: #eef2f6;
+  color: var(--ink);
+}
+
+.text-field,
+.color-field {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #25313c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.text-field input,
+.color-field input {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.text-field input {
+  padding: 7px 8px;
+  color: var(--ink);
+}
+
+.color-field input {
+  width: 52px;
+  height: 34px;
+  padding: 2px;
 }
 
 legend {
@@ -262,16 +451,16 @@ input[type='range'] {
   line-height: 1.55;
 }
 
+.hidden-input {
+  display: none;
+}
+
 .method-note {
   border-left: 3px solid var(--amber);
   padding-left: 12px;
 }
 
 @media (max-width: 1040px) {
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-
   .control-panel {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -286,11 +475,25 @@ input[type='range'] {
   fieldset {
     margin: 0;
   }
+
+  .workbench-split > .splitpanes__splitter {
+    width: auto;
+    height: 14px;
+  }
+
+  .workbench-split > .splitpanes__splitter::before {
+    top: 6px;
+    right: 16px;
+    bottom: auto;
+    left: 16px;
+    width: auto;
+    height: 2px;
+  }
 }
 
 @media (max-width: 720px) {
   .app-shell {
-    padding: 14px;
+    padding: 12px;
   }
 
   .top-bar {
@@ -299,15 +502,16 @@ input[type='range'] {
   }
 
   .top-bar h1 {
-    font-size: 30px;
+    font-size: 28px;
   }
 
   .status-strip {
     justify-content: flex-start;
   }
 
-  .main-stage {
-    grid-template-rows: 300px 390px;
+  .top-bar {
+    gap: 10px;
+    min-height: 88px;
   }
 
   .control-panel {

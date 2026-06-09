@@ -4,6 +4,10 @@ export interface Point2D {
 }
 
 export interface PolygonBody {
+  id: string;
+  name: string;
+  color: string;
+  visible: boolean;
   vertices: Point2D[];
   densityContrastKgM3: number;
   susceptibilitySI: number;
@@ -27,6 +31,15 @@ export interface ModelResponsePoint {
   x: number;
   gravityMgal: number;
   magneticNt: number;
+  rawGravityMgal: number;
+  rawMagneticNt: number;
+}
+
+export interface ResponseOptions {
+  gravityNoiseMgal: number;
+  magneticNoiseNt: number;
+  smoothingWindow: number;
+  noiseSeed: number;
 }
 
 export interface ModelBounds {
