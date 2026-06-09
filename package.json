@@ -1,0 +1,25 @@
+{
+  "name": "gravity-magnetic-2d-modeler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build --config vite.config.mjs",
+    "preview": "vite preview",
+    "test": "vitest run --config vitest.config.mjs",
+    "test:watch": "vitest --config vitest.config.mjs"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.17.0",
+    "echarts": "^5.5.1",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.7",
+    "typescript": "^5.7.2",
+    "vite": "^7.3.5",
+    "vitest": "^4.1.8",
+    "vue-tsc": "^3.3.4"
+  }
+}
